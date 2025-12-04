@@ -1,70 +1,298 @@
-# Automated-Dry-Bean-Classification-smart-agriculture
-A comparative analysis of Heterogeneous Ensemble Learning versus Optimized Tree-Based Classifiers for automated seed purity certification in Smart Agriculture. Achieved 89.13% accuracy using the UCI Dry Bean Dataset.
+# --- CELL 1: SETUP ---
+# !pip install openpyxl xgboost seaborn matplotlib scikit-learn imbalanced-learn
 
-# Automated Varietal Purity Certification in Smart Agriculture 🌱
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import time
+import os
 
-![Python](https://img.shields.io/badge/Python-3.x-blue.svg)
-![License](https://img.shields.io/badge/License-MIT-green.svg)
-![Status](https://img.shields.io/badge/Status-Completed-success.svg)
+# Preprocessing & Selection
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 
-## 📌 Project Overview
-This project addresses the critical challenge of **food fraud** and **varietal purity** in the global seed industry. By leveraging Machine Learning and Computer Vision data, we developed an automated optical sorting pipeline to classify seven registered varieties of dry beans (*Phaseolus vulgaris* L.).
+# Advanced Techniques (Distinction Criteria)
+from imblearn.over_sampling import SMOTE 
+from sklearn.ensemble import VotingClassifier
 
-The study critically compares complex **Heterogeneous Ensemble Architectures** against **Optimized Single Models** to determine the most efficient solution for real-time industrial deployment (Edge AI).
+# Models
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
+from sklearn.neighbors import KNeighborsClassifier
+from xgboost import XGBClassifier
 
-## 📊 Dataset
-**Source:** [UCI Machine Learning Repository - Dry Bean Dataset](https://archive.ics.uci.edu/ml/datasets/Dry+Bean+Dataset)  
-**Original Study:** Koklu, M. & Ozkan, I.A. (2020). DOI: [10.1016/j.compag.2020.105507](https://doi.org/10.1016/j.compag.2020.105507)
+# Metrics
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, f1_score, matthews_corrcoef
 
-* **Instances:** 13,611
-* **Features:** 16 Morphological/Geometric attributes (Area, Perimeter, ShapeFactors, etc.)
-* **Classes:** 7 (Seker, Barbunya, Bombay, Cali, Dermason, Horoz, Sira)
+# Styling
+sns.set(style="whitegrid", context="talk", palette="viridis")
+plt.rcParams['figure.figsize'] = (12, 7)
 
-## 🛠️ Methodology & Tech Stack
-The pipeline was implemented using **Python** and **Scikit-Learn** within a Jupyter Notebook environment.
+print("Libraries imported successfully.")
 
-### 1. Data Preprocessing
-* **Class Balancing:** Applied **SMOTE** (Synthetic Minority Over-sampling Technique) to the training set to mitigate bias against minority classes like *Bombay*.
-* **Dimensionality Reduction:** Used **Principal Component Analysis (PCA)** to reduce 16 multicollinear features to 6 components (retaining 95% variance).
-* **Scaling:** Applied `StandardScaler` for distance-sensitive algorithms.
 
-### 2. Algorithms Evaluated
-* **K-Nearest Neighbors (KNN)** (Baseline)
-* **Support Vector Machines (SVM)** (Optimized via GridSearchCV)
-* **XGBoost** (Gradient Boosting)
-* **Random Forest** (Regularized & Tuned)
-* **Ensemble Voting Classifier** (Soft Voting aggregation of RF + XGB + SVM)
+# --- LOAD DATA ---
+filename = 'Dry_Bean_Dataset.xlsx'
 
-## 📈 Key Results
-Contrary to the initial hypothesis that the Ensemble would perform best, the **Tuned Random Forest** emerged as the superior solution for industrial application.
+if os.path.exists(filename):
+    print(f"Found file '{filename}'. Loading...")
+    try:
+        df = pd.read_excel(filename, engine='openpyxl')
+        print(f"Dataset loaded successfully. Shape: {df.shape}")
+    except Exception as e:
+        print(f"Error loading Excel file: {e}")
+        raise
+else:
+    raise FileNotFoundError(f"File '{filename}' not found. Please ensure it is in the correct folder.")
 
-| Model Architecture | Accuracy | F1-Score | Training Time (s) | Verdict |
-| :--- | :---: | :---: | :---: | :--- |
-| **Random Forest (Tuned)** | **89.13%** | **0.89** | **2.70s** | 🏆 **Optimal** |
-| Ensemble Voting | 88.84% | 0.89 | 24.99s | Too Slow |
-| XGBoost | 88.40% | 0.88 | 0.49s | Good |
-| SVM (Optimized) | 85.97% | 0.86 | 21.96s | Weakest |
+# Define Target
+target_col = 'Class'
 
-### 🧬 Biological Insight
-Feature Importance analysis revealed that **ShapeFactor3** and **Compactness** were the most significant predictors. The model successfully "learned" that the *proportional geometry* of a seed is a more reliable genetic marker than its absolute size (*Area*).
+# Verify
+if target_col in df.columns:
+    print(f"Target Column Identified: '{target_col}'")
+else:
+    raise ValueError(f"Column '{target_col}' not found. Available columns: {df.columns.tolist()}")
 
-## 🚀 How to Run
-1.  **Clone the repository**
-    ```bash
-    git clone [https://github.com/yourusername/Automated-Dry-Bean-Classification.git](https://github.com/yourusername/Automated-Dry-Bean-Classification.git)
-    ```
-2.  **Install dependencies**
-    ```bash
-    pip install pandas numpy matplotlib seaborn scikit-learn xgboost imbalanced-learn openpyxl
-    ```
-3.  **Run the Notebook**
-    * Open `Dry_Bean_Classification.ipynb` in Jupyter or Google Colab.
-    * Ensure `Dry_Bean_Dataset.xlsx` is in the same directory.
-    * Run all cells to reproduce the results and plots.
+# Separate Features (X) and Target (y)
+y = df[target_col]
+X = df.drop(columns=[target_col])
 
-## 🤝 Future Work
-* Integration with **Hyperspectral Imaging** to resolve the overlap between *Sira* and *Dermason* varieties.
-* Deployment of the Random Forest model on **Raspberry Pi** for real-time sorting tests.
+# --- EDA ---
 
-## 📜 License
-This project is licensed under the MIT License - see the LICENSE file for details.
+# 1. Class Balance (Figure for Report)
+plt.figure(figsize=(12, 6))
+sns.countplot(data=df, x=target_col, hue=target_col, palette='viridis', legend=False)
+plt.title("Distribution of Bean Varieties (Class Imbalance Check)", fontsize=16)
+plt.xticks(rotation=45)
+plt.show()
+
+# 2. Correlation Matrix (Figure 1 in Report)
+numerical_df = df.select_dtypes(include=[np.number])
+if not numerical_df.empty:
+    plt.figure(figsize=(14, 12))
+    sns.heatmap(numerical_df.corr(), cmap='coolwarm', vmin=-1, vmax=1)
+    plt.title("Correlation Matrix (Evidence for PCA)", fontsize=16)
+    plt.show()
+
+# --- t-SNE VISUALIZATION ---
+print("Running t-SNE (High-Dimensional Visualization)...")
+
+# Fix target shape
+y_flat = y.values.ravel() if isinstance(y, pd.DataFrame) else y
+
+# Scale numeric data
+X_viz = X.select_dtypes(include=[np.number]).fillna(0)
+scaler_viz = StandardScaler()
+X_viz_scaled = scaler_viz.fit_transform(X_viz)
+
+# Run t-SNE
+tsne = TSNE(n_components=2, random_state=42, perplexity=30)
+X_embedded = tsne.fit_transform(X_viz_scaled)
+
+# Plot
+plt.figure(figsize=(12, 8))
+sns.scatterplot(x=X_embedded[:,0], y=X_embedded[:,1], hue=y_flat, palette="tab10", s=60, alpha=0.8)
+plt.title("t-SNE Projection: Visual Separation of Classes", fontsize=16)
+plt.legend(bbox_to_anchor=(1.05, 1), loc=2)
+plt.show()
+
+# --- PREPROCESSING ---
+
+# 1. Separate Numeric and Categorical
+num_cols = X.select_dtypes(include=[np.number]).columns
+cat_cols = X.select_dtypes(include=['object']).columns
+
+# 2. Handle Missing Values
+X[num_cols] = X[num_cols].fillna(X[num_cols].mean())
+for col in cat_cols:
+    X[col] = X[col].fillna(X[col].mode()[0] if len(X[col].mode()) > 0 else "Unknown")
+
+# 3. Encode Categorical Features
+le_features = LabelEncoder()
+for col in cat_cols:
+    X[col] = le_features.fit_transform(X[col].astype(str))
+
+# 4. Encode Target
+le_target = LabelEncoder()
+y_encoded = le_target.fit_transform(y)
+print(f"Target classes encoded: {le_target.classes_}")
+
+# 5. Split Data (Stratified)
+X_train_raw, X_test_raw, y_train_raw, y_test = train_test_split(X, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded)
+
+# 6. Scale Data (Fit on Train, Transform Test)
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train_raw)
+X_test_scaled = scaler.transform(X_test_raw)
+
+# 7. SMOTE (Balance Classes - Training Set Only)
+print(f"Original Train Shape: {X_train_scaled.shape}")
+smote = SMOTE(random_state=42)
+X_train_balanced, y_train_balanced = smote.fit_resample(X_train_scaled, y_train_raw)
+print(f"Balanced Train Shape: {X_train_balanced.shape} (Synthetic Data Added)")
+
+# 8. PCA (Dimensionality Reduction)
+pca = PCA(n_components=0.95)
+X_train_pca = pca.fit_transform(X_train_balanced)
+X_test_pca = pca.transform(X_test_scaled)
+
+print(f"Features reduced from {X_train_scaled.shape[1]} to {X_train_pca.shape[1]} components.")
+
+# --- AUTOMATED SVM TUNING ---
+print("Running Grid Search")
+
+# Define the grid
+param_grid = {
+    'C': [0.1, 1, 10, 100],
+    'gamma': [1, 0.1, 0.01],
+    'kernel': ['rbf']
+}
+
+# Run Search
+grid = GridSearchCV(SVC(random_state=42, probability=True), param_grid, refit=True, verbose=1, cv=3)
+grid.fit(X_train_pca, y_train_balanced)
+
+print(f"\nBest SVM Parameters: {grid.best_params_}")
+print(f"Best SVM Accuracy: {grid.best_score_:.4f}")
+
+# Save the best model for later use
+best_svm_model = grid.best_estimator_
+
+# --- FULL MODEL COMPARISON ---
+
+# 1. Define Individual Models
+knn = KNeighborsClassifier(n_neighbors=5)
+# Tuned Random Forest (Regularized to prevent overfitting)
+rf_tuned = RandomForestClassifier(n_estimators=100, max_depth=10, min_samples_split=10, random_state=42)
+xgb = XGBClassifier(eval_metric='mlogloss', random_state=42)
+svm_opt = best_svm_model # From Cell 6
+
+# 2. Define Ensemble (Voting Classifier)
+ensemble = VotingClassifier(
+    estimators=[('RF', rf_tuned), ('XGB', xgb), ('SVM', svm_opt)],
+    voting='soft'
+)
+
+# Dictionary of all models to run
+models = {
+    "KNN": knn,
+    "Random Forest (Tuned)": rf_tuned,
+    "XGBoost": xgb,
+    "SVM (Optimized)": svm_opt,
+    "Ensemble Voting": ensemble
+}
+
+results = {}
+conf_matrices = {}
+
+print("Training all models...")
+
+for name, model in models.items():
+    start_time = time.time()
+    
+    # Train
+    model.fit(X_train_pca, y_train_balanced)
+    
+    # Predict
+    y_pred = model.predict(X_test_pca)
+    
+    # Metrics
+    time_taken = time.time() - start_time
+    acc = accuracy_score(y_test, y_pred)
+    f1 = f1_score(y_test, y_pred, average='weighted')
+    mcc = matthews_corrcoef(y_test, y_pred)
+    
+    results[name] = {'Accuracy': acc, 'F1-Score': f1, 'MCC': mcc, 'Time (s)': time_taken}
+    conf_matrices[name] = confusion_matrix(y_test, y_pred)
+    
+    print(f"--> {name}: Acc={acc:.4f} | Time={time_taken:.2f}s")
+
+print("\n--- FINAL RANKING TABLE (Table II in Report) ---")
+display(pd.DataFrame(results).T.sort_values(by='Accuracy', ascending=False))
+
+# --- CONFUSION MATRIX GRID ---
+plt.figure(figsize=(20, 12))
+
+target_names = le_target.classes_
+model_names = list(results.keys())
+
+for i, name in enumerate(model_names):
+    plt.subplot(2, 3, i+1) # Creates a grid
+    sns.heatmap(conf_matrices[name], annot=True, fmt='d', cmap='Blues', 
+                xticklabels=target_names, yticklabels=target_names)
+    plt.title(f"{name}")
+    plt.xlabel('Predicted')
+    plt.ylabel('Actual')
+
+plt.tight_layout()
+plt.show()
+
+# --- DETAILED CLASSIFICATION REPORTS ---
+
+# 1. Ensemble Report (For Table III)
+print("--- ENSEMBLE DETAILED REPORT ---")
+ensemble_pred = models['Ensemble Voting'].predict(X_test_pca)
+print(classification_report(y_test, ensemble_pred, target_names=le_target.classes_))
+
+# 2. SVM Report (For Comparison Text)
+print("\n--- SVM DETAILED REPORT ---")
+svm_pred = models['SVM (Optimized)'].predict(X_test_pca)
+print(classification_report(y_test, svm_pred, target_names=le_target.classes_))
+
+# --- OVERFITTING CHECK (ENSEMBLE) ---
+print("--- Overfitting Analysis (Ensemble Model) ---")
+
+# Train Acc
+y_train_pred = models['Ensemble Voting'].predict(X_train_pca)
+train_acc = accuracy_score(y_train_balanced, y_train_pred)
+
+# Test Acc
+test_acc = results['Ensemble Voting']['Accuracy']
+
+print(f"Training Accuracy: {train_acc:.4f}")
+print(f"Test Accuracy:     {test_acc:.4f}")
+gap = train_acc - test_acc
+print(f"Gap:               {gap:.2%}")
+
+if gap < 0.05:
+    print("STATUS: Excellent Generalization! (Distinction Level)")
+else:
+    print("STATUS: Slight Overfitting (Expected for Ensembles).")
+
+# --- FEATURE IMPORTANCE ---
+print("Calculating Feature Importance (Original Features)...")
+
+# Train explainer model on original data 
+rf_explainer = RandomForestClassifier(
+    n_estimators=100, max_depth=10, min_samples_split=10, random_state=42
+)
+rf_explainer.fit(X_train_raw, y_train_raw)
+
+importances = rf_explainer.feature_importances_
+feature_names = X.columns
+indices = np.argsort(importances)[::-1]
+
+# Plot
+plt.figure(figsize=(12, 8))
+
+sns.barplot(
+    x=importances[indices[:15]], 
+    y=feature_names[indices[:15]], 
+    hue=feature_names[indices[:15]], # Fix: Map color to feature name
+    palette="magma", 
+    legend=False                     # Fix: Hide redundant legend
+)
+
+
+plt.title("Top 15 Key Features for Bean Classification", fontsize=16)
+plt.xlabel("Importance Score")
+plt.ylabel("Feature Name") 
+plt.show()
+
+print("\nTop 3 Key Features:")
+for i in range(3):
+    print(f"{i+1}. {feature_names[indices[i]]}")
